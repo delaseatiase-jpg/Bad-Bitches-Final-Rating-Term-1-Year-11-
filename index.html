@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Final Rating</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    body {
+        font-family: Arial, sans-serif;
+        background: #0f1115;
+        color: white;
+        min-height: 100vh;
+        padding: 40px 20px;
+    }
+
+    .wrapper {
+        max-width: 1000px;
+        margin: auto;
+    }
+
+    h1 {
+        text-align: center;
+        font-size: 42px;
+        margin-bottom: 35px;
+        letter-spacing: 2px;
+    }
+
+    .layout {
+        display: grid;
+        grid-template-columns: 350px 1fr;
+        gap: 25px;
+    }
+
+    .card {
+        background: #181b22;
+        border: 1px solid #292d36;
+        border-radius: 16px;
+        padding: 25px;
+    }
+
+    h2 {
+        margin-bottom: 20px;
+    }
+
+    label {
+        display: block;
+        margin-top: 15px;
+        margin-bottom: 7px;
+        color: #c7cbd4;
+    }
+
+    input {
+        width: 100%;
+        padding: 13px;
+        border-radius: 9px;
+        border: 1px solid #343944;
+        background: #101218;
+        color: white;
+        font-size: 16px;
+    }
+
+    input:focus {
+        outline: none;
+        border-color: #6c7cff;
+    }
+
+    button {
+        width: 100%;
+        margin-top: 22px;
+        padding: 14px;
+        border: none;
+        border-radius: 9px;
+        background: #5865f2;
+        color: white;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background: #4752c4;
+    }
+
+    button:disabled {
+        background: #3a3f4d;
+        cursor: not-allowed;
+    }
+
+    .leaderboard-header {
+        display: grid;
+        grid-template-columns: 60px 1fr 100px;
+        padding: 12px;
+        color: #8e95a3;
+        font-size: 13px;
+        border-bottom: 1px solid #292d36;
+    }
+
+    .employee {
+        display: grid;
+        grid-template-columns: 60px 1fr 100px;
+        align-items: center;
+        padding: 17px 12px;
+        border-bottom: 1px solid #292d36;
+    }
+
+    .employee:last-child {
+        border-bottom: none;
+    }
+
+    .rank {
+        font-weight: bold;
+        font-size: 18px;
+    }
+
+    .name {
+        font-weight: bold;
+    }
+
+    .score {
+        text-align: right;
+        font-size: 20px;
+        font-weight: bold;
+    }
+
+    .empty {
+        text-align: center;
+        color: #777e8c;
+        padding: 40px 10px;
+    }
+
+    .result {
+        margin-top: 20px;
+        padding: 15px;
+        background: #101218;
+        border-radius: 10px;
+        display: none;
+    }
+
+    .result strong {
+        font-size: 22px;
+    }
+
+    @media (max-width: 750px) {
+        .layout {
+            grid-template-columns: 1fr;
+        }
+
+        h1 {
+            font-size: 32px;
+        }
+    }
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+    <h1>FINAL RATING</h1>
+
+    <div class="layout">
+
+        <!-- RATING FORM -->
+        <div class="card">
+
+            <h2>Rate Person</h2>
+
+            <form id="ratingForm">
+
+                <label for="name">Name</label>
+                <input
+                    type="text"
+                    id="name"
+                    placeholder="Enter name"
+                    required
+                >
+
+                <label for="faceCard">Face Card (1–10)</label>
+                <input
+                    type="number"
+                    id="faceCard"
+                    min="1"
+                    max="10"
+                    step="0.1"
+                    required
+                >
+
+                <label for="yams">Yams (1–10)</label>
+                <input
+                    type="number"
+                    id="yams"
+                    min="1"
+                    max="10"
+                    step="0.1"
+                    required
+                >
+
+                <button type="submit" id="submitBtn">
+                    Submit Rating
+                </button>
+
+            </form>
+
+            <div class="result" id="result"></div>
+
+        </div>
+
+
+        <!-- LEADERBOARD -->
+        <div class="card">
+
+            <h2>Leaderboard</h2>
+
+            <div class="leaderboard-header">
+                <span>RANK</span>
+                <span>NAME</span>
+                <span style="text-align:right;">RATING</span>
+            </div>
+
+            <div id="leaderboard">
+                <div class="empty">
+                    Connecting to live updates...
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- Firebase Realtime Database Scripts -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+// Public live database configuration
+const firebaseConfig = {
+    databaseURL: "https://final-rating-default-rtdb.firebaseio.com/"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+const ratingsRef = database.ref("ratings");
+
+let employees = [];
+
+// Real-time listener: Listen for any changes across all connected devices
+ratingsRef.on("value", function(snapshot) {
+    const data = snapshot.val();
+    employees = [];
+
+    if (data) {
+        // Group incoming database ratings by user name
+        const grouped = {};
+
+        Object.keys(data).forEach(function(key) {
+            const entry = data[key];
+            const lowerName = entry.name.toLowerCase();
+
+            if (!grouped[lowerName]) {
+                grouped[lowerName] = {
+                    name: entry.name,
+                    ratings: []
+                };
+            }
+
+            grouped[lowerName].ratings.push({
+                faceCard: entry.faceCard,
+                yams: entry.yams
+            });
+        });
+
+        // Convert grouped object to array
+        Object.keys(grouped).forEach(function(key) {
+            employees.push(grouped[key]);
+        });
+
+        // Sort by highest overall average
+        employees.sort(function(a, b) {
+            return getAverage(b) - getAverage(a);
+        });
+    }
+
+    updateLeaderboard();
+});
+
+
+document.getElementById("ratingForm").addEventListener("submit", function(event) {
+    event.preventDefault();
+
+    const name = document.getElementById("name").value.trim();
+    const faceCard = Number(document.getElementById("faceCard").value);
+    const yams = Number(document.getElementById("yams").value);
+
+    // Validate scores
+    if (
+        !name ||
+        faceCard < 1 || faceCard > 10 ||
+        yams < 1 || yams > 10
+    ) {
+        alert("Please enter valid ratings from 1 to 10.");
+        return;
+    }
+
+    const average = (faceCard + yams) / 2;
+    const submitBtn = document.getElementById("submitBtn");
+
+    submitBtn.disabled = true;
+    submitBtn.innerText = "Submitting...";
+
+    // Push new rating entry to Firebase database
+    ratingsRef.push({
+        name: name,
+        faceCard: faceCard,
+        yams: yams,
+        timestamp: Date.now()
+    }, function(error) {
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Submit Rating";
+
+        if (error) {
+            alert("Error saving rating. Please try again.");
+        } else {
+            // Show result card locally
+            document.getElementById("result").style.display = "block";
+            document.getElementById("result").innerHTML = `
+                <strong>${escapeHTML(name)}</strong><br>
+                Final Rating: ${average.toFixed(1)} / 10
+            `;
+
+            // Reset form input fields
+            document.getElementById("ratingForm").reset();
+        }
+    });
+});
+
+
+function getAverage(employee) {
+    let total = 0;
+    let count = employee.ratings.length;
+
+    employee.ratings.forEach(function(rating) {
+        total += (rating.faceCard + rating.yams) / 2;
+    });
+
+    return total / count;
+}
+
+
+function updateLeaderboard() {
+    const leaderboard = document.getElementById("leaderboard");
+    leaderboard.innerHTML = "";
+
+    if (employees.length === 0) {
+        leaderboard.innerHTML = `
+            <div class="empty">
+                No ratings yet. Be the first to submit!
+            </div>
+        `;
+        return;
+    }
+
+    employees.forEach(function(employee, index) {
+        const average = getAverage(employee);
+
+        let medal = index + 1;
+        if (index === 0) medal = "🥇";
+        if (index === 1) medal = "🥈";
+        if (index === 2) medal = "🥉";
+
+        const row = document.createElement("div");
+        row.className = "employee";
+
+        row.innerHTML = `
+            <div class="rank">${medal}</div>
+
+            <div>
+                <div class="name">
+                    ${escapeHTML(employee.name)}
+                </div>
+                <small style="color:#777e8c;">
+                    ${employee.ratings.length}
+                    rating${employee.ratings.length === 1 ? "" : "s"}
+                </small>
+            </div>
+
+            <div class="score">
+                ${average.toFixed(1)}
+            </div>
+        `;
+
+        leaderboard.appendChild(row);
+    });
+}
+
+
+function escapeHTML(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+
+</body>
+</html>
